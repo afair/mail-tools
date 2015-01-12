@@ -72,6 +72,38 @@ TODO: Write usage instructions here
 
     Action: unsubscribe, complain, confirm, redact, <frequency>
 
+Relay Standard
+
+    http://relay.example.com
+    POST /
+    Authorization: <Token>
+    HMTP-Mail-From: sender@example.com
+    HMTP-Rcpt-To: recipient1@example.com
+    HMTP-Rcpt-To: recipient2@example.com
+    HMTP-Message-Id: <Token>
+
+    Subject: Your Message...
+
+Receiving Decomposed Mail
+
+    http://relay.example.com
+    POST /
+    Authorization: <Token>
+    HMTP-Mail-From: sender@example.com
+    HMTP-Rcpt-To: recipient1@example.com
+    HMTP-Message-Id: <Token>
+
+    subject=...
+    from=header
+    from_email=info@example.com
+    to=header
+    to_email=recipient1@example.com
+    subject:Hello!
+    date=...
+    text:Howdy
+    html:<div>howdy</div>
+    Attachments as multipart upload...
+
 ## Contributing
 
 1. Fork it ( https://github.com/[my-github-username]/mail-tools/fork )

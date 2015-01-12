@@ -1,23 +1,47 @@
-##############################################################################
-# Wrapper around Mail gem, access more like EmailMessage
-#-----------------------------------------------------------------------------
-# description:text sender recipient subject alt_subject sent_at:datetime
-# message_id_header to_name to_email from_name from_email from_header
-# other_headers body_text:text body_html:html body_sms subject_search
-# text_search filename rfc822_size:integer data:hstore type
-#-----------------------------------------------------------------------------
-# mail[:header_name].to_s #=> value
-# mail[:to].addrs.collect {|a| [a.address, a.display_name] }
-# mail.multipart? ? mail.parts.collect {|p| p.body.decoded } : mail.body.decoded
-# mail[:content_type].content_type #=> "multipart/alternative"
-# mail.body.parts.first.parts.first[:content_type].content_type #=> "text/plain"
-##############################################################################
 
 module Mail
   module Tools
 
+    # A simple email editing interface for fields in a Mail instance.
+    # This is NOT a user-facing editor; it manipluates headers and bodies
+    # for complete custimzation of resulting messages.
+    #
+    # Usage:
+    #
+    #   editor = Mail::Tools::Editor.new( ... ) # Takes same args and Mail.new
+    #   editor = Mail::Tools::Editor.read(filename)
+    #   editor = Mail::Tools::Editor.for_mail(mail) # Tales a mail instance
+    #   editor = Mail::Tools::Editor.construct(
+    #              subject: "Foo",
+    #              from: "info@example.com", from_name: "Information",
+    #              to:   "pat@example.com",  to_name:   "Pat", # Single recipient
+    #              body_text: "Hello!",
+    #              body_html: "<h1>Hello!</h1>",
+    #              attachments: [Mail::Part.new,...]
+    #            )
+    #   editor[:header_name].to_s #=> value
+    #   editor[:to].addrs.collect {|a| [a.address, a.display_name] }
+    #   editor.multipart? ? mail.parts.collect {|p| p.body.decoded } : mail.body.decoded
+    #   editor[:content_type].content_type #=> "multipart/alternative"
+    #   editor.body.parts.first.parts.first[:content_type].content_type #=> "text/plain"
+    #
+    #   Mail::Tools::Mailbox.deliver("~/Mailbox", editor.mail)
+    #
     class Editor
       attr_accessor :mail
+
+      def initialize(*args)
+        case args.first
+        when Mail::Tools::Message
+          @mail = args.first.mail
+        when Mail
+          @mail = args.first
+        when File
+          @mail = Mail.new(args.first.read)
+        else
+          @mail = Mail.new(*args)
+        end
+      end
 
       def self.read(filename)
         self.new(File.read(filename))
@@ -28,13 +52,11 @@ module Mail
 
         email.subject   = a[:subject]   if a[:subject]
         email.date      = a[:date]      if a[:date]
-        email.from      = a[:from]      if a[:from]
-        email.from_name = a[:from_name] if a[:from_name]
-        email.to        = a[:from]      if a[:from]
-        email.to_name   = a[:to_name]   if a[:to_name]
+        email.from      = [a[:from], a[:from_name]] if a[:from]
+        email.to        = [a[:to], a[:to_name]]     if a[:from]
 
         email.body_text = a[:body_text] if a[:body_text]
-        email.html_text = a[:html_text] if a[:html_text]
+        email.body_html = a[:body_html] if a[:body_html]
         a[:attachments].each {|f| email.attach(f) } if a[:attachments]
 
         email
@@ -44,10 +66,6 @@ module Mail
         editor = Editor.new
         editor.mail = mail
         editor
-      end
-
-      def initialize(*args)
-        @mail = Mail.new(*args)
       end
 
       def to_s
@@ -108,26 +126,24 @@ module Mail
       def date; @mail.date; end
       def date=(d); @mail.date=d; end
 
+      def from; @mail.from; end
       def from_email(index=0); mail_address(:from, index).first; end
       def from_name(index=0); mail_address(:from, index).second; end
       def from_header; @mail[:from].to_s; end
       def from_addresses; mail_addresses(:to); end #=> [[addr,name],...]
 
       def from=(email) # email, [email, name]
-        (email, name) = email.is_a?(Array) ? email : [email, nil]
-        @mail.from = email
-        @mail[:from].addrs.first.display_name = name if name
+        @mail.from = make_email_header(*email)
       end
 
+      def to; @mail.to; end
       def to_email(index=0); mail_address(:to, index).first; end
       def to_name(index=0); mail_address(:to, index).second; end
       def to_header; @mail[:to].to_s; end
       def to_addresses; mail_addresses(:to); end
 
       def to=(email) # email, [email, name]
-        (email, name) = email.is_a?(Array) ? email : [email, nil]
-        @mail.to = email
-        @mail[:to].addrs.first.display_name = name if name
+        @mail.to = make_email_header(*email)
       end
 
       def parse_email_header(header) #=> [email, display_name]
