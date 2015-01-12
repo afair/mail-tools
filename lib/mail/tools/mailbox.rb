@@ -15,15 +15,15 @@ module Mail
     class Mailbox
       include Enumerable
 
-      def self.mail(mail_tools_message, filepath)
-        MailTools::Mailbox.new(filepath).mail(mail_tools_message)
+      def self.deliver(filepath, message)
+        Mail::Tools::Mailbox.new(filepath).deliver(message)
       end
 
       def initialize(filepath)
         @filepath = filepath
       end
 
-      def mail(mail_tools_message)
+      def deliver(mail_tools_message)
         write_message(mail_tools_message)
       end
 
@@ -32,7 +32,7 @@ module Mail
           f.flock(File::LOCK_EX)
           f.puts "From #{msg.return_path} #{Time.new.strftime("%a %b %e %H:%M:%S %Y")}"
           msg.recipients.each do |r|
-            f.puts "Delivered-To: #{r}"
+            f.puts "Delivered-To: #{r.address}"
           end
           f.puts msg.message.gsub(/^(\>*From )/, '\>$1'), "\n"
         end
@@ -47,14 +47,14 @@ module Mail
           while !f.eof
             line = f.gets.chomp
             if m = line.match(/\AFrom (\S+) (.+)/)
-              yield MailTools::Message.new(msg.gsub(/^\>(\>*From)/,'$1'), separator[1]), separator[2]
+              yield Mail::Tools::Message.new(msg.gsub(/^\>(\>*From)/,'$1'), separator[1]), separator[2]
               msg = ''
               separator = m
             else
               msg += line + "\n"
             end
           end
-          yield MailTools::Message.new(msg, separator[1]) if msg > ' '
+          yield Mail::Tools::Message.new(msg, separator[1]) if msg > ' '
         end
       end
 

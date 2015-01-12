@@ -20,8 +20,8 @@ module Mail
       INFO = {'P'=>'Passed/Resent/Forwarded/Bounced', 'R'=>'Replied', 'S'=>'Seen',
               'T'=>'Trashed', 'D'=>'Draft', 'F'=>'Flagged'}
 
-      def self.deliver(mail_tools_message, dir)
-        MailTools::Maildir.new(dir).deliver(mail_tools_message)
+      def self.deliver(dir, mail_tools_message)
+        Mail::Tools::Maildir.new(dir).deliver(mail_tools_message)
       end
 
       def self.create(dir)
@@ -55,7 +55,7 @@ module Mail
         end
         File.open(File.join(@dir, 'tmp', fname), 'w') do |f|
           f.puts "Return-Path: <#{msg.return_path}>"
-          msg.recipients.each { |recip| f.puts "Delivered-To: #{recip}" }
+          msg.recipients.each { |recip| f.puts "Delivered-To: #{recip.address}" }
           f.puts msg.message
         end
         File.rename(File.join(@dir, 'tmp', fname), File.join(@dir, 'new', fname))
@@ -70,7 +70,7 @@ module Mail
             c = n.sub('/new/', '/cur/')
             c += ':2,'
             File.rename(n, c)
-            m = MailTools::Message.read(c)
+            m = Mail::Tools::Message.parse(File.read(c))
             yield m, c
           end
         end
@@ -82,7 +82,7 @@ module Mail
         Dir.new(File.join(@dir,'cur')).each do |filename|
           if filename =~ /\A\w/ # Not a . or .. 
             f = File.join(@dir, filename)
-            n = MailTools::Message.read(f)
+            n = Mail::Tools::Message.read(f)
             yield f, n
           end
         end

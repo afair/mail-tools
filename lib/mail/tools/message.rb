@@ -22,6 +22,12 @@ module Mail
         self.recipients  = args
       end
 
+      # Instantiates message from a string of an RFC822-style message. Envelope
+      # return path and recipients are read fromn the message headers.
+      def self.parse(rfc822_message)
+        Message.new(rfc822_message, :headers, :headers)
+      end
+
       ##########################################################################
       # Message
       ##########################################################################
@@ -78,8 +84,10 @@ module Mail
       def return_path=(rp)
         if rp.is_a?(String)
           @return_path = rp
-        else
+        elsif rp.is_a?(Symbol) && rp == :headers
           @return_path = editor.from_email || '<>'
+        else
+          @return_path = '<>'
         end
       end
 

@@ -6,46 +6,80 @@ module Mail
     #
     # This is not intended as a delivery transport. It transfers the message
     # as a queue object (message, return path, recipients) to another server
-    # for delivery. The remote server runs a "mail_tools-qmqpd" daemon to accept
+    # for delivery. The remote server runs a "qmail-qmqpd" daemon to accept
     # the message. Postfix also ships with a QMQP listener so can be used as
     # the target MTA.
     #
     # Usage:
     #
-    #   Mail::Tools::QMQP.deliver(mail_tools_message)
+    #   Mail::Tools::QMQP.deliver(message, ip:address, port:628)
+    #
+    #   Server IP Address can be configured as a single ip address, or a
+    #   comma-delimited list, found in the following priority:
+    #   * as :ip in options hash as a string or array of IP strings
+    #   * QMQP_SERVERS environment variable
+    #   * Qmail qmqpservers (/var/qmail/configure/qmqpservers)
+    #   * Default of 127.0.0.1
+    #   Each address can be of the format "ip:port" to override the port.
     #
     # Returns: Hash of the following:
     #
     #   {sucess:boolean, response:string, server:"ip:port"}
     #
     class QMQP
+      QMAIL_QMQPSERVERS='/var/qmail/configure/qmqpservers'
 
       def self.deliver(msg, options={})
-        QMQP.new(options).deliver(msg)
+        Mail::Tools::QMQP.new(options).deliver(msg)
       end
 
       def initialize(options={})
         @options = options
+        if @options[:ip]
+          @options[:ip] = @options[:ip].split(",") if @options[:ip].is_a?(String)
+        elsif ENV['QMQP_SERVERS']
+          @options[:ip] = ENV['QMQP_SERVERS'].split(",")
+        elsif File.exists?(QMAIL_QMQPSERVERS)
+          @options[:ip] = File.read(QMAIL_QMQPSERVERS).split("\n")
+        else
+          @options[:ip] = ['127.0.0.1']
+        end
       end
 
-      def deliver(mail_tools_message=nil)
-        msg    = mail_tools_message if mail_tools_message
-        begin
-          ip     = @options[:ip]   || qmqp_server
-          port   = @options[:port] || Mail::Tools::Config.qmqp_port
-          socket = TCPSocket.new(ip, port)
-          if socket
-            socket.send(msg.to_netstring, 0)
-            socket.close_write
-            @response = socket.recv(1000)
+      # Delivers
+      def deliver(message)
+        socket = connect_to_server
+        if socket
+          socket.send(Mail::Tools::Netstring.encode_message(message), 0)
+          socket.close_write
+          @response = socket.recv(1000)
+          if Mail::Tools::Netstring.valid?(@response)
+            @response, _ = Mail::Tools::Netstring.decode(@response)
           end
           socket.close
-          {sucess:true, response:@response, server:"#{ip}:#{port}"}
-
-        rescue SocketError, SystemCallError => e
-          socket.close if socket
-          {sucess:false, response:e.to_s, server:"#{ip}:#{port}"}
+          {success:true, response:@response, server:"#{@ip}:#{@port}"}
+        else
+          {success:false, response:@errors.join("\n")}
         end
+      end
+
+      # Connect to first avail server in qmqpservers list, returns socket
+      def connect_to_server
+        ips  = Array(@options[:ip])
+        ips  = ips.shuffle if @options[:shuffle]
+        port = @options[:port] || 628
+        @errors = []
+        ips.each do |ip|
+          begin
+            @ip, @port = ip.split(':')
+            @port ||= port
+            socket = TCPSocket.new(@ip, @port)
+          rescue SocketError, SystemCallError => e
+            @errors << "QMQP Connect Error [#{ip}:#{port}]: #{e}"
+          end
+          return socket if socket
+        end
+        nil
       end
 
       # Returns the configured QMQP server ip address
@@ -57,25 +91,7 @@ module Mail
         File.readlines(filename)[i].chomp
       end
 
-      # Takes a socket with an incoming qmqp message, returns the message
-      def self.receive(io)
-        b = ''
-        while (ch = io.read(1)) =~ /\d/
-          b += ch
-        end
-        msg = io.read(b.to_i)
-        message = Message.from_netstring("#{b}:" + msg + ',')
-
-        if message
-          io.puts Mail::Tools::Netstring.encode("Kok #{Time.now.to_i} qp #{$$}")
-        else
-          io.puts Mail::Tools::Netstring.encode("DError in message")
-        end
-
-        message
-      end
-
-      # Simple server, for prototyping
+      # A simple, reference implementation QMQP Daemon server.
       # Mail::Tools::QMQP::Server.new() { |msg| p msg }
       class Server
         def initialize(bind_ip='127.0.0.1', port=630, max_accepts=-1, &block)
@@ -93,7 +109,26 @@ module Mail
             puts "Exception! #{e}"
           end
         end
+
+        # Takes a socket with an incoming qmqp message, returns the message
+        def receive(io)
+          b = ''
+          while (ch = io.read(1)) =~ /\d/
+            b += ch
+          end
+          msg = io.read(b.to_i)
+          message = Mail::Tools::Netstring.decode_message("#{b}:" + msg + ',')
+
+          if message
+            io.puts Mail::Tools::Netstring.encode("Kok #{Time.now.to_i} qp #{$$}")
+          else
+            io.puts Mail::Tools::Netstring.encode("DError in message")
+          end
+
+          message
+        end
       end
+
     end
 
   end

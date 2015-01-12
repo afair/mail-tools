@@ -45,7 +45,7 @@ module Mail
         list.is_a?(Recipients) ? list : Recipients.new(list || [])
       end
 
-      def initialize(*recipients)
+      def initialize(recipients)
         self.recipients = recipients
       end
 
@@ -112,13 +112,15 @@ module Mail
         @count
       end
 
+      # Adds recipients to the message, from a list of mixed-type containers.
       def add(*recipients)
+        return if recipients.size == 0
         recipients.each do |r|
           if r.is_a?(Array) && !r.empty? 
-            if r.second.is_a?(Hash)
+            if r.size==2 && r[1].is_a?(Hash)
               add_recipient(r)
             else
-              r.each { |rr| self.add_recipient(normalize_recipient(rr)) }
+              r.each { |rr| self.add_recipient(Mail::Tools::Recipient.coerce(rr)) }
             end
           elsif r.is_a?(Hash) # {address:{data},...}
             r.each { |e, d| self.add_recipient([e, d]) }
@@ -137,7 +139,7 @@ module Mail
       end
 
       def add_string_recipient(str)
-        self.add_recipient(parse_recipient)
+        self.add_recipient(Recipient.parse(str))
       end
 
       def add_recipient(recipient)
@@ -166,96 +168,12 @@ module Mail
 
       def file_recipient(recipient)
         rec = recipient.first
-        if recipient.second && recipient.second.is_a?(Hash)
-          rec += "\t" + recipient.second.to_json
+        if recipient[1] && recipient[1].is_a?(Hash)
+          rec += "\t" + recipient[1].to_json
         end
         rec + "\n"
       end
 
-      ##############################################################################
-      # Parsing
-      ##############################################################################
-
-      def normalize_recipient(recip)
-        case recip
-        when Array # [email, data]
-          recip[1] ||= Hash.new
-          recip[1] = parse_data(recip[1]) if recip[1].is_a?(String)
-          recip
-        when String
-          parse_recipient(recip)
-        when Hash
-          email = recip.delete("email")
-          add_recipient([email, recip])
-          recip["email"] = email #restore?
-        else
-        end
-      end
-
-      def parse_recipient(str)
-        email, data = ['', Hash.new]
-        str.strip!
-
-        if str =~ /\A(\S+)\s+(\{.*\})/ # "address {"name":"Pat"}
-          email, data = [$1, parse_json($2)]
-        elsif str =~ /\A[^\s\|\,]+([\s\,\|]?)/x # separator for "email name fields"
-          if $1 == '' # Email only
-            email = str
-          elsif $1 == ' ' # Email<SPACE>Name
-            (email, name) = str.split(/\s+/, 2)
-            data[:name] = name
-          else # Email<TAB>Name<TAB><DATA_STRING>
-            (email,*fields) = str.split($1).map {|s| s.strip  }
-            if fields.size > 1 # with name and/or fields
-              data = parse_data(fields[1]).merge(name:fields[0])
-            elsif fields.first =~ /^(\{\"?\w|\w+=.*)/ # fields only
-              data = parse_data(fields.first)
-            else
-              data[:name] = fields.first
-            end
-          end
-        elsif str =~ /(\w[\w\.\-\+\=\']*@\w[\w\.\-]+\w)/ # Find inside email
-          email = $1
-        elsif str =~ /\A\s*([\da-f]{32})\b/ # MD5
-          email = $1
-        end
-
-        email = normalize_email_address(email)
-        [email, data]
-      end
-
-      def normalize_email_address(email)
-        return email.downcase if email =~ /\A[\da-f]{32}\z/i
-        EmailAddress.new(email).normalize
-      end
-
-      def parse_data(data)
-        fields = {}
-        if data =~ /\A(\w+)=/
-          data.split(/; */).each do |pair|
-          _,v = pair.strip.split(/ *= */, 2)
-          fields[v.downcase] = v
-        end
-        elsif data =~ /\A\{"\w+":/
-          fields = parse_json(data)
-        end
-        fields
-      end
-
-      def parse_json(data, empty_value={})
-        begin
-          r = JSON.parse(data)
-          r.symbolize_keys! if r.is_a?(Hash)
-          if r.is_a?(Array)
-            r.each {|rr| rr.symbolize_keys! if rr.is_a?(Hash) }
-          end
-        rescue JSON::ParserError => e
-          p [:JSON, e, data]
-          r = empty_value
-          #raise e
-        end
-        r
-      end
     end
   end
 end

@@ -15,17 +15,22 @@ module Mail
     #  netstring(netstring(messagebody) + netstring(returnpath)
     #            + netstring(recipient) + ...)
     #
-    # Since MailTools/SMTP is 7-bit only, this string is expected to be
+    # Since SMTP is 7-bit only, this string is expected to be
     # a 7-bit ASCII. Unpredictable results will occur if you send
     # UTF-8 (Unicode) or 8-bit extensions (ISP-8851-x).
 
     class Netstring
 
+      def self.valid?(str)
+        len = str.to_i
+        str =~ /\A\d+:(.{#{len}}),(.*)/m
+      end
+
       def self.encode_message(msg)
-        nstr  = encode(self.message+"\n")
-        nstr += encode(self.return_path)
-        self.recipients.each { |r| nstr += MailTools::Netstring.encode(r) }
-        MailTools::Netstring.encode(nstr)
+        nstr  = encode(msg.message+"\n")
+        nstr += encode(msg.return_path)
+        msg.recipients.each { |r| nstr += Mail::Tools::Netstring.encode(r.address) }
+        Mail::Tools::Netstring.encode(nstr)
       end
 
       def self.decode_message(netstring)

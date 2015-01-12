@@ -3,19 +3,19 @@ module Mail
     class Recipient
       attr_accessor :address, :data
 
-      def initalize(address, data={})
+      def initialize(address, data={})
         self.address = address
         self.data    = data
       end
 
-      def self.normalize_recipient(recip)
+      def self.coerce(recip)
         case recip
         when Array # [email, data]
           recip[1] ||= Hash.new
           recip[1] = parse_data(recip[1]) if recip[1].is_a?(String)
           Recipient.new(recip[0], recip[1])
         when String
-          parse_recipient(recip)
+          self.parse(recip)
         when Hash
           email = recip.delete("email") || recip.delete("address")
           Recipient.new(email, recip)
@@ -28,7 +28,7 @@ module Mail
         str.strip!
 
         if str =~ /\A(\S+)\s+(\{.*\})/ # "address {"name":"Pat"}
-          email, data = [$1, parse_json($2)]
+          email, data = [$1, Recipient.parse_json($2)]
         elsif str =~ /\A[^\s\|\,]+([\s\,\|]?)/x # separator for "email name fields"
           if $1 == '' # Email only
             email = str
@@ -51,11 +51,11 @@ module Mail
           email = $1
         end
 
-        email = normalize_email_address(email)
-        new(email, data)
+        email = self.normalize_email_address(email)
+        Mail::Tools::Recipient.new(email, data)
       end
 
-      def normalize_email_address(email)
+      def self.normalize_email_address(email)
         return email.downcase if email =~ /\A[\da-f]{32}\z/i
         # EmailAddress.new(email).normalize
         ::Mail::Address.new(email).address
@@ -69,12 +69,12 @@ module Mail
           fields[v.downcase] = v
         end
         elsif data =~ /\A\{"\w+":/
-          fields = parse_json(data)
+          fields = Recipient.parse_json(data)
         end
         fields
       end
 
-      def parse_json(data, empty_value={})
+      def self.parse_json(data, empty_value={})
         begin
           r = JSON.parse(data)
           r.symbolize_keys! if r.is_a?(Hash)
@@ -87,6 +87,14 @@ module Mail
           #raise e
         end
         r
+      end
+
+      def to_record
+        if self.data.size > 0
+          [self.email, self.data.to_json].join("\t") + "\n"
+        else
+          self.email + "\n"
+        end
       end
 
     end
