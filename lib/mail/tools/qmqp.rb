@@ -131,5 +131,34 @@ module Mail
 
     end
 
+    # A Rails Custom ActionMailer Delivery Method for QMQP:
+    #
+    # Configure in ~/config/environments/*.rb
+    #   config.action_mailer.delivery_method = Mail::Tools::QMQP::DeliveryMethod
+    #
+    # Then set the target server though the QMQP_SERVERS environment variable
+    # as a comma-separated list of IP addresses with optional colon-port,
+    #
+    #      export QMQP_SERVERS=192.168.1.1,127.0.0.1:6280
+    #
+    # or through the /var/qmail/configure/qmqpservers file, if you are running
+    # a Qmail instance.
+    #
+    # Usage:
+    #   MyMailer.confirm(user).deliver_later
+    #
+    class DeliveryMethod
+
+      # This method takes a Mail instance, converts to MailTools::Message and sends
+      # to the configured QMQP server
+      def deliver!(mail)
+        m = Mail::Tools::Message.new(mail.to_s, 
+                                     mail.from.is_a?(Array) ? mail.from.first : mail.from,
+                                     mail.to)
+        Mail::Tools::QMQP.delivery(m)
+      end
+
+    end
+
   end
 end

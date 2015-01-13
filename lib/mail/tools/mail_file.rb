@@ -20,18 +20,41 @@ module Mail
     #-----------------------------------------------------------------
 
     class MailFile
+      attr_accessor :file, :message
+
+      def initialize(filename, message=nil)
+        @file = filename
+        if File.exists?(filename)
+          @message = self.read(@file)
+        else
+          @message = message || Mail::Tools::Message.new
+        end
+      end
+
+      def write(message=nil)
+        @message = message if nil
+        save
+      end
+
+      def save
+        MailFile.write(@file, @message)
+      end
+
+      def self.save(file, message)
+        mf = ::MAil::Tools::MailFile.new(file, message)
+        mf.save
+        mf
+      end
 
       # Loads message from a Mailfile, returns a Mail::Tools::Message object
       def self.read(filename)
         msg = Mail::Tools::Message.new
         File.open(filename) do |f|
           while (rec = f.readline.chomp) > ""
-            if rec =~ /\AMailfile (.+)/
-              msg.options = parse_options($1)
-            elsif msg.return_path.nil? || msg.return_path == ""
+            if msg.return_path_empty?
               msg.return_path = rec
             else
-              msg.recipients.push(rec)
+              msg.recipients.add(rec)
             end
           end
           msg.message = f.read.chomp
@@ -42,13 +65,12 @@ module Mail
       # Takes a MailTools::Message and a target path and filename. Serializes the
       # message to the given filename
       def self.write(filename, msg)
-        begin
-          File.open(filename, 'w') do |f|
-            f.puts msg.return_path
-            msg.recipients.each { |r| f.puts r }
-            f.puts "\n" + msg.message
-          end
-        rescue
+        File.open(filename, 'w') do |f|
+          f.puts msg.return_path
+          msg.recipients.each { |r| 
+            f.puts r.to_record 
+          }
+          f.puts "\n" + msg.message
         end
         File.exist?(filename)
       end

@@ -77,23 +77,27 @@ module Mail
       def self.parse_json(data, empty_value={})
         begin
           r = JSON.parse(data)
-          r.symbolize_keys! if r.is_a?(Hash)
+          r = symbol_key_hash(r) if r.is_a?(Hash)
           if r.is_a?(Array)
-            r.each {|rr| rr.symbolize_keys! if rr.is_a?(Hash) }
+            r = r.map {|rr| rr = symbol_key_hash(rr) if rr.is_a?(Hash) }
           end
-        rescue JSON::ParserError => e
-          p [:JSON, e, data]
+        rescue JSON::ParserError #=> e
+          #p [:JSON, e, data]
           r = empty_value
           #raise e
         end
         r
       end
 
+      def self.symbol_key_hash(hash)
+        hash.inject({}){|memo,(k,v)| memo[k.to_sym] = v; memo}
+      end
+
       def to_record
         if self.data.size > 0
-          [self.email, self.data.to_json].join("\t") + "\n"
+          [self.address, self.data.to_json].join("\t") + "\n"
         else
-          self.email + "\n"
+          self.address + "\n"
         end
       end
 

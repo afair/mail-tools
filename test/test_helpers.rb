@@ -10,7 +10,7 @@ def basic_email
 end
 
 def basic_message(from=ENV['FROM'], to=ENV['TO'], opt={})
-    Mail::Tools::Message.new(basic_email, from||'me@example.com', to||'you@example.com')
+    Mail::Tools::Message.new(basic_email, from||'me@example.com', to||'you@example.com {"name":"You"}')
 end
 
 def maildrop

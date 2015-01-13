@@ -40,9 +40,9 @@ module Mail
         case obj
         when String
           @message = obj
-        when Mail
+        when Mail::Message
           @mail    = obj
-          @message = Mail.to_s
+          @message = obj.to_s
         when Hash
           @mail    = Mail::Tools::Editor.construct(obj)
           @message = @mail.to_s
@@ -107,6 +107,10 @@ module Mail
 
       def verp?
         @return_path && @return_path.end_with?(VERP_FLAG)
+      end
+
+      def return_path_empty?
+        @return_path.nil? || @return_path == '<>' || @return_path <= ' '
       end
       
       ##########################################################################
