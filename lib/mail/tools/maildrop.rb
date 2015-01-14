@@ -31,11 +31,8 @@ module Mail::Tools
 
     def deliver(message)
       filename = new_filename
-      #p [:fn, filename, message]
       Mail::Tools::MailFile.write(filename + '.tmp', message)
-      p [filename + '.tmp ', filename + '.new']
-      p `ls -l #{@dir}`
-      File.rename(filename + '.tmp ', filename + '.new')
+      File.rename(filename + '.tmp', filename + '.new')
       filename + '.new'
     end
 
@@ -43,7 +40,7 @@ module Mail::Tools
     def new_filename
       fname = nil
       loop do
-        fname = [Time.now.to_i, rand(99999), Socket.gethostname].join('.')
+        fname = [Time.now.to_i, rand(99999), Socket.gethostname.gsub('.','_')].join('.')
         break unless File.exists?(File.join(@dir, 'new', fname))
       end
       @dir + File::SEPARATOR + fname
@@ -58,7 +55,7 @@ module Mail::Tools
     #   Mail::Tools::Maildrop.new(dir).receive {|m| Mail::Tools::Inject.deliver(m); }
     #
     def receive
-      now = Time.now.to_i.to_s
+       now = (Time.now.to_i + 5).to_s
       self.each do |filename, qname|
         next if qname > now # Deferred, time back-off
         msg = Mail::Tools::MailFile.read(filename)
