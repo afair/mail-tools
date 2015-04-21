@@ -77,7 +77,7 @@ module Mail
       end
 
       def to_s
-        self.collect { |a| f.puts(a[0] + "\t" + a[1].to_json) }.join("\n")
+        self.collect { |a| a.address + "\t" + a.data.to_json }.join("\n")
       end
 
       def to_hash
